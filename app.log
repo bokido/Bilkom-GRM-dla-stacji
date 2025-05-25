@@ -1,0 +1,13 @@
+2025-05-25 17:49:59,354 ERROR: Wyst�pi� b��d: Brak wymaganych parametr�w w linku: {'from_station': None, 'to_station': None, 'date': None, 'train_number': None}
+Traceback (most recent call last):
+  File "C:\Users\bokid\Documents\Cursor AI projects\Bilkom GRM dla stacji\main.py", line 86, in analyze_url
+    raise ValueError(f"Brak wymaganych parametr�w w linku: {params}")
+ValueError: Brak wymaganych parametr�w w linku: {'from_station': None, 'to_station': None, 'date': None, 'train_number': None}
+
+2025-05-25 17:50:07,545 ERROR: Wyst�pi� b��d: Brak wymaganych parametr�w w linku: {'from_station': None, 'to_station': None, 'date': None, 'train_number': None}
+Traceback (most recent call last):
+  File "C:\Users\bokid\Documents\Cursor AI projects\Bilkom GRM dla stacji\main.py", line 86, in analyze_url
+    raise ValueError(f"Brak wymaganych parametr�w w linku: {params}")
+ValueError: Brak wymaganych parametr�w w linku: {'from_station': None, 'to_station': None, 'date': None, 'train_number': None}
+
+2025-05-25 18:02:33,494 INFO: Tabela: miejsc=0, kolumn=4

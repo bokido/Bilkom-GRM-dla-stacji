@@ -1,0 +1,5 @@
+requests>=2.31.0
+customtkinter>=5.2.1
+numpy>=2.2.0
+pandas>=2.2.0
+beautifulsoup4>=4.12.2 
