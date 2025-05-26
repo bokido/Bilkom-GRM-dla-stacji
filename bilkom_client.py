@@ -188,6 +188,7 @@ class StationMapper:
     def __init__(self, csv_path="sources/all_stations.csv"):
         self.epa_to_name = {}
         self.hafas_to_name = {}
+        self.epa_to_hafas = {}
         if not os.path.exists(csv_path):
             csv_path = os.path.join("__pycache__", csv_path)
         try:
@@ -204,6 +205,8 @@ class StationMapper:
                         else:
                             epa_num = epa
                         self.epa_to_name[epa_num] = name
+                        if hafas:
+                            self.epa_to_hafas[epa_num] = hafas
                     if hafas:
                         self.hafas_to_name[hafas] = name
             print("Mapowanie EPA na nazwy stacji:", self.epa_to_name)

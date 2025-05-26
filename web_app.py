@@ -1,6 +1,7 @@
 import streamlit as st
 import json
 from bilkom_client import BilkomClient, StationMapper
+import streamlit.components.v1 as components
 
 st.set_page_config(page_title="BILKOM GRM Analyzer", layout="wide")
 st.title("BILKOM GRM Analyzer (wersja web)")
@@ -18,6 +19,10 @@ def get_link():
         return ""
 
 link = st.text_input("Wklej link z BILKOM:", value=get_link(), key="link")
+# Dodaj przycisk Kopiuj obok pola
+components.html(f'''
+    <button onclick="navigator.clipboard.writeText(document.querySelector('input[data-testid=\'stTextInput\']').value)" style="margin-left:8px;padding:6px 16px;border-radius:6px;border:1px solid #1976D2;background:#1976D2;color:#fff;cursor:pointer;">Kopiuj</button>
+''', height=40)
 
 if 'results' not in st.session_state:
     st.session_state['results'] = None
@@ -53,6 +58,76 @@ if st.button("Analizuj miejsca"):
             'arrival': stop.get('plannedArrivalTime', ''),
             'departure': stop.get('plannedDepartureTime', '')
         }
+    # --- PODSUMOWANIE ZAPYTANIA ---
+    if stops and len(stops) > 1:
+        first_stop = stops[0]
+        last_stop = stops[-1]
+        st.session_state['summary'] = {
+            'train_number': params['train_number'],
+            'from_station': str(first_stop.get('stationNumber')),
+            'to_station': str(last_stop.get('stationNumber')),
+            'from_station_name': get_station_name(str(first_stop.get('stationNumber'))),
+            'to_station_name': get_station_name(str(last_stop.get('stationNumber'))),
+            'date': params['date'],
+        }
+    else:
+        st.session_state['summary'] = {
+            'train_number': params['train_number'],
+            'from_station': params['from_station'],
+            'to_station': params['to_station'],
+            'from_station_name': get_station_name(params['from_station']),
+            'to_station_name': get_station_name(params['to_station']),
+            'date': params['date'],
+        }
+    # --- Wyświetlanie listy wagonów z checkboxami i opisem trasy ---
+    schema_json = None
+    try:
+        schema_json = json.loads(resp1)
+    except Exception:
+        pass
+    wagons_schema = []
+    if schema_json and 'carriages' in schema_json:
+        for carriage in schema_json['carriages']:
+            wagon_num = str(carriage.get('carriageNumber'))
+            travel_plan = carriage.get('travelPlan', {})
+            from_epa = str(travel_plan.get('fromStationNumber')) if travel_plan else None
+            to_epa = str(travel_plan.get('toStationNumber')) if travel_plan else None
+            wagons_schema.append({
+                'wagon': wagon_num,
+                'from_epa': from_epa,
+                'to_epa': to_epa
+            })
+    # --- Wyświetlanie unikalnych relacji wagonów pod podsumowaniem ---
+    if wagons_schema:
+        # Grupowanie wagonów po relacji (from_epa, to_epa)
+        relacje = {}
+        for w in wagons_schema:
+            key = (w['from_epa'], w['to_epa'])
+            if key not in relacje:
+                relacje[key] = []
+            relacje[key].append(w['wagon'])
+        st.markdown("**Wagony/relacje:**")
+        st.markdown("<table style='width:100%;border-collapse:collapse;'>", unsafe_allow_html=True)
+        for (from_epa, to_epa), wagons in relacje.items():
+            from_name = get_station_name(from_epa)
+            to_name = get_station_name(to_epa)
+            wagony_str = ", ".join(sorted(wagons, key=int))
+            col1, col2 = st.columns([4,1])
+            col1.markdown(f"<b>{from_name}</b> → <b>{to_name}</b> &nbsp;&nbsp; wagony: {wagony_str}", unsafe_allow_html=True)
+            if col2.button(f"Przelicz", key=f"recalc_{from_epa}_{to_epa}"):
+                # Podmień w linku fromStation i toStation na HAFAS odpowiadające EPA
+                mapper = station_mapper
+                from_hafas = mapper.epa_to_hafas.get(from_epa)
+                to_hafas = mapper.epa_to_hafas.get(to_epa)
+                st.write(f"EPA from: {from_epa}, to: {to_epa} | HAFAS from: {from_hafas}, to: {to_hafas}")
+                if from_hafas and to_hafas:
+                    import re
+                    new_link = re.sub(r'(items%5b0%5d.fromStation=)[^&]*', f'\\1{from_hafas}', link)
+                    new_link = re.sub(r'(items%5b0%5d.toStation=)[^&]*', f'\\1{to_hafas}', new_link)
+                    st.write(f"Nowy link: {new_link}")
+                    st.session_state['link'] = new_link
+                    st.experimental_rerun()
+        st.markdown("</table>", unsafe_allow_html=True)
     results = {}
     all_seats = set()
     seat_properties = {}
@@ -85,7 +160,7 @@ if st.button("Analizuj miejsca"):
     def seat_sort_key(seat):
         wagon, number = seat.split('-')
         return (int(wagon), int(number))
-    seats_sorted = sorted([seat for seat in all_seats if seat.split('-')[0] in selected_wagons], key=seat_sort_key)
+    seats_sorted = sorted(all_seats, key=seat_sort_key)
     all_wagons = sorted({seat.split('-')[0] for seat in seats_sorted}, key=int)
     pretty_columns = []
     for col in results.keys():
@@ -99,6 +174,18 @@ if st.button("Analizuj miejsca"):
     st.session_state['all_wagons'] = all_wagons
     st.session_state['show_props'] = None
     st.session_state['station_info'] = station_info
+
+if 'summary' in st.session_state and st.session_state['summary']:
+    s = st.session_state['summary']
+    st.markdown(f"""
+    <div style='border:2px solid #1976D2; border-radius:8px; padding:12px; margin-bottom:18px; background:#f5f8ff;'>
+    <b>Podsumowanie trasy:</b><br>
+    <b>Numer pociągu:</b> <code>{s['train_number']}</code><br>
+    <b>Stacja początkowa:</b> <code>{s['from_station_name']}</code> ({s['from_station']})<br>
+    <b>Stacja końcowa:</b> <code>{s['to_station_name']}</code> ({s['to_station']})<br>
+    <b>Data wyjazdu:</b> <code>{s['date']}</code>
+    </div>
+    """, unsafe_allow_html=True)
 
 if st.session_state['results']:
     results = st.session_state['results']
@@ -115,25 +202,28 @@ if st.session_state['results']:
     html = """
     <style>
     .grm-table { border-collapse: collapse; width: 100%; }
-    .grm-table th, .grm-table td { border: 1px solid #ddd; padding: 4px; text-align: center; }
-    .grm-table th { background: #f5f5f5; font-size: 13px; font-weight: bold; }
+    .grm-table th, .grm-table td { border: 1px solid #bbb; padding: 7px 4px; text-align: center; }
+    .grm-table th { background: #f5f5f5; font-size: 12px; font-weight: bold; }
     .grm-dot { width: 18px; height: 18px; border-radius: 50%; display: inline-block; margin: 0 2px; }
     .grm-seat { cursor: pointer; font-weight: bold; }
     .grm-seat.class1 { color: #F44336; }
-    .grm-table thead th.rotate { height: 90px; white-space: nowrap; }
-    .grm-table thead th.rotate > div { transform: rotate(-90deg); width: 20px; }
+    .grm-table tbody tr:nth-child(even) { background: #f9f9f9; }
+    .grm-table tbody tr:nth-child(odd) { background: #fff; }
+    .grm-table tr { border-bottom: 2px solid #e0e0e0; }
+    .grm-table thead th.rotate { height: 110px; min-width: 36px; max-width: 60px; vertical-align: bottom; padding: 2px 2px; }
+    .grm-table thead th.rotate > div { transform: rotate(-75deg); font-size: 11px; white-space: normal; overflow: hidden; text-overflow: ellipsis; max-width: 60px; margin: 0 auto; }
     </style>
     <table class='grm-table'>
       <thead>
         <tr>
-          <th>Miejsce</th>
-"""
+          <th>Miejsce</th>"""
     for info in columns:
         arrival = info['arrival'][11:16] if info['arrival'] else ""
         departure = info['departure'][11:16] if info['departure'] else ""
-        godziny = f"<div style='font-size:11px; font-weight:normal;'>{arrival} / {departure}</div>" if arrival or departure else ""
-        html += f"<th class='rotate'><div>{info['name']}</div>{godziny}</th>"
-    html += "</tr></thead><tbody>"
+        godziny = f"<div style='font-size:10px; font-weight:normal;'>{arrival} / {departure}</div>" if arrival or departure else ""
+        # Dodaj tooltip z pełną nazwą stacji
+        html += f"<th class='rotate'><div title='{info['name']}'>{info['name']}</div>{godziny}</th>"
+    html += "</tr>\n      </thead>\n      <tbody>"
     for seat in seats_sorted:
         props = seat_properties.get(seat, [])
         is_class1 = "CLASS_1" in props
@@ -154,7 +244,6 @@ if st.session_state['results']:
     st.markdown(html, unsafe_allow_html=True)
 
     # Wyświetlanie właściwości miejsca po kliknięciu (hash w URL)
-    import streamlit.components.v1 as components
     components.html("""
     <script>
     window.addEventListener('hashchange', function() {
