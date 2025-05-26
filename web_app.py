@@ -85,7 +85,7 @@ if st.button("Analizuj miejsca"):
     def seat_sort_key(seat):
         wagon, number = seat.split('-')
         return (int(wagon), int(number))
-    seats_sorted = [seat for seat in sorted(all_seats, key=seat_sort_key)]
+    seats_sorted = sorted([seat for seat in all_seats if seat.split('-')[0] in selected_wagons], key=seat_sort_key)
     all_wagons = sorted({seat.split('-')[0] for seat in seats_sorted}, key=int)
     pretty_columns = []
     for col in results.keys():
@@ -110,26 +110,35 @@ if st.session_state['results']:
     default_wagons = all_wagons[:1] if all_wagons else []
     selected_wagons = st.multiselect("Pokaż wagony:", all_wagons, default=default_wagons, key="wagony")
     seats_sorted = [seat for seat in seats_sorted if seat.split('-')[0] in selected_wagons]
-    # Nagłówki
-    cols = st.columns([1] + [1 for _ in columns])
-    cols[0].markdown("**Miejsce**")
-    for i, info in enumerate(columns):
-        # Nazwa pionowo, godziny pod spodem, kod w tooltipie
-        css = "writing-mode: vertical-rl; transform: rotate(180deg); font-size: 14px; font-weight: bold; white-space: nowrap;"
-        tooltip = f"Kod stacji: {info['code']}"
+
+    # Generowanie tabeli HTML
+    html = """
+    <style>
+    .grm-table { border-collapse: collapse; width: 100%; }
+    .grm-table th, .grm-table td { border: 1px solid #ddd; padding: 4px; text-align: center; }
+    .grm-table th { background: #f5f5f5; font-size: 13px; font-weight: bold; }
+    .grm-dot { width: 18px; height: 18px; border-radius: 50%; display: inline-block; margin: 0 2px; }
+    .grm-seat { cursor: pointer; font-weight: bold; }
+    .grm-seat.class1 { color: #F44336; }
+    .grm-table thead th.rotate { height: 90px; white-space: nowrap; }
+    .grm-table thead th.rotate > div { transform: rotate(-90deg); width: 20px; }
+    </style>
+    <table class='grm-table'>
+      <thead>
+        <tr>
+          <th>Miejsce</th>
+"""
+    for info in columns:
         arrival = info['arrival'][11:16] if info['arrival'] else ""
         departure = info['departure'][11:16] if info['departure'] else ""
         godziny = f"<div style='font-size:11px; font-weight:normal;'>{arrival} / {departure}</div>" if arrival or departure else ""
-        cols[i+1].markdown(f"<div title='{tooltip}'><span style='{css}'>{info['name']}</span>{godziny}</div>", unsafe_allow_html=True)
-    # Tabela
+        html += f"<th class='rotate'><div>{info['name']}</div>{godziny}</th>"
+    html += "</tr></thead><tbody>"
     for seat in seats_sorted:
         props = seat_properties.get(seat, [])
         is_class1 = "CLASS_1" in props
-        seat_col = st.columns([2,1]+[1 for _ in columns])
-        seat_label = f":red[{seat}]" if is_class1 else seat
-        seat_col[0].markdown(seat_label, unsafe_allow_html=True)
-        if seat_col[1].button("ℹ️", key=f"seatinfo_{seat}"):
-            st.session_state['show_props'] = seat
+        seat_class = "grm-seat class1" if is_class1 else "grm-seat"
+        html += f"<tr><td class='{seat_class}' onclick=\"window.location.hash='seat_{seat}'\">{seat}</td>"
         for col_idx, info in enumerate(columns):
             epa_num = info['code']
             col_key = None
@@ -139,11 +148,37 @@ if st.session_state['results']:
                     break
             status = results[col_key].get(seat, "unknown") if col_key else "unknown"
             color = {"AVAILABLE": "#4CAF50", "RESERVED": "#F44336", "BLOCKED": "#9E9E9E", "unknown": "#E0E0E0"}.get(status.upper(), "#E0E0E0")
-            # Kropka zamiast prostokąta
-            seat_col[col_idx+2].markdown(f'<div style="background:{color};width:18px;height:18px;border-radius:50%;margin:auto;"></div>', unsafe_allow_html=True)
-    if st.session_state.get('show_props'):
-        seat = st.session_state['show_props']
-        props = seat_properties.get(seat, [])
-        st.info(f"Właściwości miejsca {seat}:\n\n" + "\n".join([f"- {p}" for p in props]) if props else "Brak dodatkowych właściwości.")
-        if st.button("Zamknij podgląd właściwości", key="close_props"):
-            st.session_state['show_props'] = None 
+            html += f"<td><span class='grm-dot' style='background:{color}'></span></td>"
+        html += "</tr>"
+    html += "</tbody></table>"
+    st.markdown(html, unsafe_allow_html=True)
+
+    # Wyświetlanie właściwości miejsca po kliknięciu (hash w URL)
+    import streamlit.components.v1 as components
+    components.html("""
+    <script>
+    window.addEventListener('hashchange', function() {
+      const hash = window.location.hash;
+      if(hash.startsWith('#seat_')) {
+        const seat = hash.replace('#seat_', '');
+        window.parent.postMessage({seat: seat}, '*');
+      }
+    });
+    </script>
+    """, height=0)
+    import streamlit as st2
+    if 'show_props' not in st.session_state:
+        st.session_state['show_props'] = None
+    import streamlit_javascript as st_js
+    seat_clicked = st_js.st_javascript("""
+    function getSeatFromHash() {
+      if(window.location.hash.startsWith('#seat_')) {
+        return window.location.hash.replace('#seat_', '');
+      }
+      return '';
+    }
+    getSeatFromHash();
+    """)
+    if seat_clicked and seat_clicked in seat_properties:
+        props = seat_properties.get(seat_clicked, [])
+        st.info(f"Właściwości miejsca {seat_clicked}:\n\n" + "\n".join([f"- {p}" for p in props]) if props else "Brak dodatkowych właściwości.") 
