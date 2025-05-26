@@ -4,6 +4,55 @@ from bilkom_client import BilkomClient, StationMapper
 import streamlit.components.v1 as components
 
 st.set_page_config(page_title="BILKOM GRM Analyzer", layout="wide")
+
+# Dodaj przełącznik trybu ciemnego/jasnego
+st.markdown("""
+    <style>
+        .stApp {
+            background-color: var(--background-color);
+            color: var(--text-color);
+        }
+        .stButton>button {
+            background-color: var(--button-color);
+            color: var(--button-text-color);
+        }
+        .stTextInput>div>div>input {
+            background-color: var(--input-color);
+            color: var(--input-text-color);
+        }
+    </style>
+""", unsafe_allow_html=True)
+
+# Dodaj przełącznik w menu
+st.sidebar.markdown("### Ustawienia")
+theme = st.sidebar.radio("Tryb", ["Jasny", "Ciemny"])
+if theme == "Ciemny":
+    st.markdown("""
+        <style>
+            :root {
+                --background-color: #1E1E1E;
+                --text-color: #FFFFFF;
+                --button-color: #2C2C2C;
+                --button-text-color: #FFFFFF;
+                --input-color: #2C2C2C;
+                --input-text-color: #FFFFFF;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+else:
+    st.markdown("""
+        <style>
+            :root {
+                --background-color: #FFFFFF;
+                --text-color: #000000;
+                --button-color: #F0F2F6;
+                --button-text-color: #000000;
+                --input-color: #FFFFFF;
+                --input-text-color: #000000;
+            }
+        </style>
+    """, unsafe_allow_html=True)
+
 st.title("BILKOM GRM Analyzer (wersja web)")
 
 station_mapper = StationMapper()
